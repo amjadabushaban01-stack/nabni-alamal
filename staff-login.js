@@ -15,6 +15,8 @@ const roles={
 let session;
 let chatMessages=[];
 let chatRequest=0;
+const embeddedChat=new URLSearchParams(location.search).get('view')==='chat';
+if(embeddedChat) document.body.classList.add('chat-embedded');
 function say(message){q('notice').textContent=message;}
 function saveSession(value){
   session=value?.access_token&&value?.refresh_token?value:null;
@@ -64,11 +66,25 @@ async function listGrants(){
 }
 async function route(){
   for(const id of ['signedOut','signedIn','accounts','technical','adminLink','development-chat']) q(id).hidden=true;
+  q('embeddedAccess').hidden=true;
   if(!session){
-    q('signedOut').hidden=false;
+    if(embeddedChat){
+      q('embeddedMessage').textContent='سجّل الدخول بحساب المدير أو المطوّر لفتح المحادثة.';
+      q('embeddedAccess').hidden=false;
+    } else q('signedOut').hidden=false;
     return;
   }
   const role=await secured('/rest/v1/rpc/hope_activate_access',{method:'POST',body:{}});
+  if(embeddedChat){
+    if(role==='admin'||role==='developer'){
+      q('development-chat').hidden=false;
+      await prepareChat();
+    } else {
+      q('embeddedMessage').textContent='مساعد التطوير متاح لحسابات المدير والمطوّر.';
+      q('embeddedAccess').hidden=false;
+    }
+    return;
+  }
   q('signedIn').hidden=false;
   q('roleTitle').textContent=roles[role]?.[0]||'حساب بانتظار الاعتماد';
   q('roleDescription').textContent=roles[role]?.[1]||'اطلب من المدير اعتماد بريدك وتحديد دورك، ثم سجّل الدخول مجددًا.';
@@ -202,9 +218,10 @@ async function start(){
     catch {saveSession(null);}
   }
   await route();
+  if(embeddedChat) return;
   const settings=await call('/auth/v1/settings');
   q('googleLogin').hidden=!settings.external?.google;
   if(settings.external?.phone) q('identityLabel').textContent='البريد الإلكتروني أو الهاتف الدولي';
   q('signupToggle').hidden=!!settings.disable_signup;
 }
-start().catch(()=>{q('signedOut').hidden=false;say('تعذّر إكمال الاتصال. حاول مجددًا.');});
+start().catch(()=>{if(!embeddedChat) q('signedOut').hidden=false;say('تعذّر إكمال الاتصال. حدّث الصفحة للمحاولة مجددًا.');});

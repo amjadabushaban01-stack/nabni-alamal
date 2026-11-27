@@ -1,4 +1,10 @@
 'use strict';
+function openDevelopmentChat(){
+  tab('developmentChat');
+  const frame=document.getElementById('developmentChatFrame');
+  if(!frame.hasAttribute('src')) frame.src='/login.html?view=chat';
+}
+
 (async()=>{
   if(location.hash!=='#staff-admin') return;
   history.replaceState(null,'',location.pathname);
