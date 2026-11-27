@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>دخول الفريق | نبني الأمل</title>
+<style>
+[hidden]{display:none!important}
+*{box-sizing:border-box}body{margin:0;background:#f2f6fa;color:#102d50;font:1rem/1.65 system-ui,Tahoma,Arial,sans-serif}header{background:#102d50;color:white;padding:14px max(16px,calc((100vw - 840px)/2));display:flex;justify-content:space-between;gap:14px;align-items:center}header a{color:white}main{width:min(calc(100% - 28px),840px);margin:30px auto}section{background:white;border:1px solid #d8e5f2;border-radius:14px;padding:clamp(16px,3vw,30px);margin-bottom:14px}h1,h2,h3{line-height:1.35;margin:0 0 12px}p{margin:8px 0 14px}form{display:grid;gap:10px;max-width:550px;margin:0 0 15px}button,input,select,textarea{font:inherit;border:1px solid #c4d4e4;border-radius:8px;padding:8px 10px}input,select,textarea{display:block;width:100%;background:white;color:#133456}button,.action{background:#155b9d;color:white;padding:8px 13px;text-decoration:none;border-radius:8px;border:1px solid #155b9d;cursor:pointer;display:inline-block}button.alt{background:#e9f1fb;color:#134778;border-color:#d6e4f2}.buttons{display:flex;flex-wrap:wrap;gap:8px}.status:not(:empty){background:#e6f2ff;border-radius:8px;padding:10px 13px}ul{padding-inline-start:23px}li{margin-block:6px;overflow-wrap:anywhere}button:disabled{opacity:.55}#accessPassword{max-width:420px}a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid #548dce;outline-offset:2px}
+</style>
+<script src="/staff-login.js" defer></script>
+</head>
+<body>
+<header><strong>نبني الأمل | بوابة العاملين</strong><a href="/">موقع الجمعية</a></header>
+<main>
+<p id="notice" class="status" role="status"></p>
+<section id="signedOut" hidden>
+<h1>تسجيل الدخول</h1>
+<p>استخدم الحساب المعتمد لك لدى الإدارة. تظهر لك الصفحة المخصصة لدورك بعد الدخول.</p>
+<form id="loginForm">
+<label><span id="identityLabel">البريد الإلكتروني</span><input name="identity" autocomplete="username" required dir="ltr" maxlength="254"></label>
+<label>كلمة المرور<input name="password" type="password" required autocomplete="current-password" maxlength="128"></label>
+<div class="buttons"><button>دخول</button><button id="signupToggle" type="button" class="alt">تفعيل حساب بالبريد</button><button id="googleLogin" type="button" class="alt" hidden>الدخول باستخدام Google</button></div>
+</form>
+<form id="signupForm" hidden style="max-width:550px">
+<label>البريد المعتمد<input name="email" type="email" required autocomplete="email" dir="ltr"></label>
+<label>اختر كلمة مرور<input name="password" type="password" minlength="10" maxlength="128" required autocomplete="new-password"></label>
+<button>إرسال رابط تأكيد البريد</button>
+</form>
+</section>
+<section id="signedIn" hidden>
+<h1 id="roleTitle"></h1>
+<p id="roleDescription"></p>
+<div class="buttons"><a id="adminLink" class="action" href="/#staff-admin" hidden>فتح لوحة إدارة الموقع التجريبية</a><button id="logout" type="button" class="alt">تسجيل الخروج</button></div>
+</section>
+<section id="accounts" hidden>
+<h2>اعتماد حسابات الفريق</h2>
+<p>أضف البريد وحدد الدور. بعد اعتماد البريد، يفعّل صاحبه الحساب من صفحة الدخول.</p>
+<form id="grantForm">
+<label>البريد الإلكتروني<input name="email" type="email" required dir="ltr"></label>
+<label>الصلاحية<select name="role"><option value="employee">موظف</option><option value="secretary">سكرتير</option><option value="developer">مطوّر الموقع</option><option value="caseworker">موظف الكفالات</option><option value="publisher">ناشر محتوى</option><option value="finance">محاسب</option></select></label>
+<button>اعتماد الحساب</button>
+</form>
+<ul id="grants"></ul>
+</section>
+<section id="technical" hidden>
+<h2>مساحة تطوير الموقع</h2>
+<form id="designForm">
+<label>ملاحظات التطوير والإصدار<textarea name="notes" rows="6" maxlength="6000"></textarea></label>
+<button>حفظ الملاحظات</button>
+</form>
+</section>
+</main>
+</body>
+</html>
