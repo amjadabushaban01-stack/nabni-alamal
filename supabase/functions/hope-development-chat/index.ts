@@ -61,14 +61,24 @@ Deno.serve(async (request) => {
         instructions:'أنت مساعد تطوير لموقع جمعية نبني الأمل على nabni-alamal.onrender.com. ساعد بالعربية في التخطيط والمراجعة وكتابة النصوص واقتراح تعديلات الكود بناءً على المواد التي يرسلها المستخدم. اذكر الملفات أو المقتطفات الناقصة عند الحاجة. لا تدّع أنك تستطيع قراءة الملفات أو تغيير الموقع أو النشر. وجّه المستخدم إلى التحقق من المقترحات قبل تطبيقها.\n\nمرجع المشروع الموثق:\n'+JSON.stringify(projectContext)
       })
     });
-    if (!result.ok) return respond({error:result.status===429?'openai_limit':'openai_unavailable'},502);
+    if (!result.ok) {
+      const failure = await result.json().catch(()=>null);
+      const safeCode = (value: unknown) => typeof value==='string'&&/^[a-z0-9_]{1,64}$/.test(value) ? value : null;
+      console.warn(JSON.stringify({event:'hope_openai_request_failed',status:result.status,
+        code:safeCode(failure?.error?.code),type:safeCode(failure?.error?.type)}));
+      return respond({error:result.status===429?'openai_limit':'openai_unavailable'},502);
+    }
     const data = await result.json();
     const text = (data.output||[]).filter((item)=>item.type==='message')
       .flatMap((item)=>item.content||[]).filter((part)=>part.type==='output_text')
       .map((part)=>part.text).join('\n').trim();
-    if (!text) return respond({error:'empty_response'},502);
+    if (!text) {
+      console.warn(JSON.stringify({event:'hope_openai_empty_response',status:data.status==='incomplete'?'incomplete':'unknown'}));
+      return respond({error:'empty_response'},502);
+    }
     return respond({text});
   } catch {
+    console.warn(JSON.stringify({event:'hope_chat_service_unavailable'}));
     return respond({error:'service_unavailable'},502);
   }
 });
