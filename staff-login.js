@@ -13,6 +13,8 @@ const roles={
   finance:['المحاسب','تم اعتماد دخولك بصفة محاسب.']
 };
 let session;
+let chatMessages=[];
+let chatRequest=0;
 function say(message){q('notice').textContent=message;}
 function saveSession(value){
   session=value?.access_token&&value?.refresh_token?value:null;
@@ -25,7 +27,7 @@ async function call(path,{method='GET',body,token,preferences}={}){
     ...(body?{'Content-Type':'application/json'}:{}),...(preferences?{Prefer:preferences}:{})
   },body:body?JSON.stringify(body):undefined});
   const data=response.status===204?null:await response.json();
-  if(!response.ok) throw Object.assign(Error('تعذّر تنفيذ الطلب.'),{status:response.status,code:data?.error_code||data?.code});
+  if(!response.ok) throw Object.assign(Error('تعذّر تنفيذ الطلب.'),{status:response.status,code:data?.error_code||data?.code||data?.error});
   return data;
 }
 async function secured(path,options={}){
@@ -61,7 +63,7 @@ async function listGrants(){
   q('grants').replaceChildren(...rows);
 }
 async function route(){
-  for(const id of ['signedOut','signedIn','accounts','technical','adminLink']) q(id).hidden=true;
+  for(const id of ['signedOut','signedIn','accounts','technical','adminLink','development-chat']) q(id).hidden=true;
   if(!session){
     q('signedOut').hidden=false;
     return;
@@ -79,6 +81,9 @@ async function route(){
     const rows=await secured('/rest/v1/hope_workspaces?area=eq.design&select=payload');
     q('designForm').elements.notes.value=rows[0]?.payload?.technicalNotes||'';
     q('technical').hidden=false;
+    q('development-chat').hidden=false;
+    prepareChat();
+    if(location.hash==='#development-chat') q('development-chat').scrollIntoView();
   }
 }
 bind('loginForm',async data=>{
@@ -112,9 +117,70 @@ bind('designForm',async data=>{
   }});
   say('تم حفظ ملاحظات التطوير.');
 });
+const chatPath='/functions/v1/hope-development-chat';
+function showChatStatus(message){q('chatStatus').textContent=message;}
+function renderChat(){
+  const items=chatMessages.map(message=>{
+    const item=document.createElement('li');
+    item.dataset.role=message.role;
+    const title=document.createElement('strong');
+    title.textContent=message.role==='user'?'أنت':'المساعد';
+    item.append(title,document.createTextNode(message.content));
+    return item;
+  });
+  const list=q('chatMessages');
+  list.replaceChildren(...items);
+  list.scrollTop=list.scrollHeight;
+}
+function resetChat(){
+  chatRequest++;
+  chatMessages=[];
+  q('chatForm').reset();
+  showChatStatus('');
+  renderChat();
+}
+async function prepareChat(){
+  q('chatForm').hidden=true;
+  showChatStatus('جارٍ التحقق من اتصال المساعد…');
+  try{
+    const state=await secured(chatPath,{method:'POST',body:{action:'status'}});
+    q('chatForm').hidden=!state.configured;
+    showChatStatus(state.configured?'':'مساعد التطوير بانتظار إعداد مفتاح OpenAI API.');
+  }catch {showChatStatus('تعذّر التحقق من اتصال المساعد. حدّث الصفحة للمحاولة مجددًا.');}
+}
+q('chatForm').onsubmit=async event=>{
+  event.preventDefault();
+  const input=q('chatForm').elements.message;
+  const button=event.submitter;
+  const message=input.value.trim();
+  if(!message) return;
+  const request=++chatRequest;
+  const pending={role:'user',content:message};
+  const context=[...chatMessages.slice(-10),pending];
+  chatMessages.push(pending);
+  renderChat();
+  input.value='';
+  button.disabled=true;
+  showChatStatus('المساعد يكتب الآن…');
+  try{
+    const result=await secured(chatPath,{method:'POST',body:{messages:context}});
+    if(request!==chatRequest) return;
+    chatMessages.push({role:'assistant',content:result.text});
+    renderChat();
+    showChatStatus('');
+  }catch(error){
+    if(request!==chatRequest) return;
+    chatMessages.pop();
+    renderChat();
+    if(!input.value) input.value=message;
+    showChatStatus(error.code==='openai_not_configured'?'يلزم إعداد مفتاح OpenAI API.':'تعذّر الحصول على رد. حاول مجددًا.');
+  }finally{button.disabled=false;}
+};
+q('clearChat').onclick=()=>resetChat();
 q('signupToggle').onclick=()=>{q('signupForm').hidden=!q('signupForm').hidden;};
 q('logout').onclick=async ()=>{
   try {await secured('/auth/v1/logout',{method:'POST',body:{}});}catch{}
+  resetChat();
   saveSession(null);
   say('تم تسجيل الخروج.');
   await route();
