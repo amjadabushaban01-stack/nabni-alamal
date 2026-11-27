@@ -15,6 +15,8 @@ const roles={
 let session;
 let chatMessages=[];
 let chatRequest=0;
+let chatStorageKey=null;
+let chatContext;
 const embeddedChat=new URLSearchParams(location.search).get('view')==='chat';
 if(embeddedChat) document.body.classList.add('chat-embedded');
 function say(message){q('notice').textContent=message;}
@@ -78,7 +80,7 @@ async function route(){
   if(embeddedChat){
     if(role==='admin'||role==='developer'){
       q('development-chat').hidden=false;
-      await prepareChat();
+      await openChat();
     } else {
       q('embeddedMessage').textContent='مساعد التطوير متاح لحسابات المدير والمطوّر.';
       q('embeddedAccess').hidden=false;
@@ -98,7 +100,7 @@ async function route(){
     q('designForm').elements.notes.value=rows[0]?.payload?.technicalNotes||'';
     q('technical').hidden=false;
     q('development-chat').hidden=false;
-    prepareChat();
+    openChat();
     if(location.hash==='#development-chat') q('development-chat').scrollIntoView();
   }
 }
@@ -134,6 +136,53 @@ bind('designForm',async data=>{
   say('تم حفظ ملاحظات التطوير.');
 });
 const chatPath='/functions/v1/hope-development-chat';
+function persistChat(){
+  if(!chatStorageKey) return;
+  try{
+    localStorage.setItem(chatStorageKey,JSON.stringify({
+      messages:chatMessages.slice(-60),
+      draft:q('chatForm').elements.message.value
+    }));
+  }catch {}
+}
+async function openChat(){
+  q('chatForm').hidden=false;
+  q('sendChat').disabled=true;
+  try{
+    if(!chatStorageKey){
+      const user=await secured('/auth/v1/user');
+      chatStorageKey='hope-development-chat:'+user.id;
+      const saved=JSON.parse(localStorage.getItem(chatStorageKey)||'{}');
+      if(Array.isArray(saved.messages)){
+        chatMessages=saved.messages.filter(message=>['user','assistant'].includes(message?.role)&&typeof message.content==='string').slice(-60);
+      }
+      if(typeof saved.draft==='string') q('chatForm').elements.message.value=saved.draft.slice(0,8000);
+      renderChat();
+    }
+  }catch {}
+  loadProjectContext();
+  await prepareChat();
+}
+async function loadProjectContext(){
+  const box=q('projectContextBody');
+  if(chatContext) return;
+  try{
+    const result=await fetch('/supabase/functions/hope-development-chat/project-context.json');
+    if(!result.ok) throw Error('Context unavailable');
+    chatContext=await result.json();
+    const element=(tag,text)=>{
+      const node=document.createElement(tag);
+      node.textContent=text;
+      return node;
+    };
+    box.replaceChildren(element('p',chatContext.baseline),element('p',chatContext.deployment));
+    for(const [title,values] of [['الأقسام',chatContext.areas],['ملفات المشروع',chatContext.files],['حالة الربط والصلاحيات',chatContext.constraints]]){
+      const list=document.createElement('ul');
+      for(const value of values) list.append(element('li',Array.isArray(value)?value.join(' · '):value));
+      box.append(element('h3',title),list);
+    }
+  }catch {box.textContent='تعذّر تحميل مرجع المشروع.';}
+}
 function showChatStatus(message){q('chatStatus').textContent=message;}
 function renderChat(){
   const items=chatMessages.map(message=>{
@@ -156,11 +205,13 @@ function resetChat(){
   renderChat();
 }
 async function prepareChat(){
-  q('chatForm').hidden=true;
+  q('sendChat').disabled=true;
+  q('chatSetup').hidden=true;
   showChatStatus('جارٍ التحقق من اتصال المساعد…');
   try{
     const state=await secured(chatPath,{method:'POST',body:{action:'status'}});
-    q('chatForm').hidden=!state.configured;
+    q('sendChat').disabled=!state.configured;
+    q('chatSetup').hidden=state.configured;
     showChatStatus(state.configured?'':'مساعد التطوير بانتظار إعداد مفتاح OpenAI API.');
   }catch {showChatStatus('تعذّر التحقق من اتصال المساعد. حدّث الصفحة للمحاولة مجددًا.');}
 }
@@ -169,7 +220,7 @@ q('chatForm').onsubmit=async event=>{
   const input=q('chatForm').elements.message;
   const button=event.submitter;
   const message=input.value.trim();
-  if(!message) return;
+  if(!message||button.disabled) return;
   const request=++chatRequest;
   const pending={role:'user',content:message};
   const context=[...chatMessages.slice(-10),pending];
@@ -181,7 +232,8 @@ q('chatForm').onsubmit=async event=>{
   try{
     const result=await secured(chatPath,{method:'POST',body:{messages:context}});
     if(request!==chatRequest) return;
-    chatMessages.push({role:'assistant',content:result.text});
+    chatMessages.push({role:'assistant',content:result.text.slice(0,8000)});
+    persistChat();
     renderChat();
     showChatStatus('');
   }catch(error){
@@ -189,13 +241,49 @@ q('chatForm').onsubmit=async event=>{
     chatMessages.pop();
     renderChat();
     if(!input.value) input.value=message;
+    persistChat();
     showChatStatus(error.code==='openai_not_configured'?'يلزم إعداد مفتاح OpenAI API.':'تعذّر الحصول على رد. حاول مجددًا.');
   }finally{button.disabled=false;}
 };
-q('clearChat').onclick=()=>resetChat();
+q('clearChat').onclick=()=>{
+  if((chatMessages.length||q('chatForm').elements.message.value)&&!confirm('هل تريد مسح المحادثة الحالية من هذا المتصفح؟')) return;
+  resetChat();
+  persistChat();
+};
+q('retryChat').onclick=prepareChat;
+q('chatForm').elements.message.oninput=persistChat;
+q('chatFile').onchange=async event=>{
+  const file=event.target.files[0];
+  event.target.value='';
+  if(!file) return;
+  if(file.size>64000) {showChatStatus('اختر ملفًا نصيًا أصغر، أو الصق المقتطف المطلوب.');return;}
+  const field=q('chatForm').elements.message;
+  try{
+    const text=await file.text();
+    if(text.includes(String.fromCharCode(0))) throw Error('Not text');
+    const combined=[field.value,'الملف: '+file.name,text].filter(Boolean).join('\n\n');
+    if(combined.length>8000){showChatStatus('الطلب مع المقتطف يتجاوز 8000 حرف. الصق الجزء المعني فقط.');return;}
+    field.value=combined;
+    persistChat();
+    field.focus();
+  }catch {showChatStatus('تعذّر قراءة المقتطف النصي.');}
+};
+q('exportChat').onclick=()=>{
+  const content=chatMessages.map(message=>(message.role==='user'?'أنت':'المساعد')+'\n'+message.content).join('\n\n');
+  const draft=q('chatForm').elements.message.value;
+  if(!content&&!draft){showChatStatus('المحادثة فارغة.');return;}
+  const url=URL.createObjectURL(new Blob([content,draft?'\n\nمسودة\n'+draft:''],{type:'text/plain;charset=utf-8'}));
+  const download=document.createElement('a');
+  download.href=url;
+  download.download='nabni-alamal-development-chat.txt';
+  download.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+};
 q('signupToggle').onclick=()=>{q('signupForm').hidden=!q('signupForm').hidden;};
 q('logout').onclick=async ()=>{
   try {await secured('/auth/v1/logout',{method:'POST',body:{}});}catch{}
+  persistChat();
+  chatStorageKey=null;
   resetChat();
   saveSession(null);
   say('تم تسجيل الخروج.');

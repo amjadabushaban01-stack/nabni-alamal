@@ -1,3 +1,5 @@
+import projectContext from './project-context.json' with {type:'json'};
+
 const siteOrigin = 'https://nabni-alamal.onrender.com';
 const projectUrl = Deno.env.get('SUPABASE_URL') ?? '';
 const projectKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
@@ -56,7 +58,7 @@ Deno.serve(async (request) => {
       body:JSON.stringify({
         model, input, store:false, max_output_tokens:2200,
         reasoning:{effort:'minimal'},
-        instructions:'أنت مساعد تطوير لموقع جمعية نبني الأمل على nabni-alamal.onrender.com. ساعد بالعربية في التخطيط والمراجعة وكتابة النصوص واقتراح تعديلات الكود بناءً على المواد التي يرسلها المستخدم. اذكر الملفات أو المقتطفات الناقصة عند الحاجة. لا تدّع أنك تستطيع قراءة الملفات أو تغيير الموقع أو النشر. وجّه المستخدم إلى التحقق من المقترحات قبل تطبيقها.'
+        instructions:'أنت مساعد تطوير لموقع جمعية نبني الأمل على nabni-alamal.onrender.com. ساعد بالعربية في التخطيط والمراجعة وكتابة النصوص واقتراح تعديلات الكود بناءً على المواد التي يرسلها المستخدم. اذكر الملفات أو المقتطفات الناقصة عند الحاجة. لا تدّع أنك تستطيع قراءة الملفات أو تغيير الموقع أو النشر. وجّه المستخدم إلى التحقق من المقترحات قبل تطبيقها.\n\nمرجع المشروع الموثق:\n'+JSON.stringify(projectContext)
       })
     });
     if (!result.ok) return respond({error:result.status===429?'openai_limit':'openai_unavailable'},502);
